@@ -271,9 +271,18 @@ def train(args):
                 eval_results = evaluation.evaluate(dev_set.examples, model, args,
                                                    verbose=True, eval_top_pred_only=args.eval_top_pred_only)
                 dev_acc = eval_results['accuracy']
-                print('[Epoch %d] code generation accuracy=%.5f took %ds' % (epoch, dev_acc, time.time() - eval_start), file=sys.stderr)
+                oracle_acc = eval_results['oracle_accuracy']
+                print('[Epoch %d] code generation dev accuracy=%.5f took %ds (oracle_accuracy=%.5f)' % (epoch, dev_acc, time.time() - eval_start, oracle_acc), file=sys.stderr)
                 is_better = history_dev_scores == [] or dev_acc > max(history_dev_scores)
                 history_dev_scores.append(dev_acc)
+                # eval on train
+                eval_start = time.time()
+                eval_results = evaluation.evaluate(train_set.examples[:500], model, args,
+                                                   verbose=True, eval_top_pred_only=args.eval_top_pred_only)
+                dev_acc = eval_results['accuracy']
+                oracle_acc = eval_results['oracle_accuracy']
+                print('[Epoch %d] code generation train accuracy=%.5f took %ds (oracle_accuracy=%.5f)' % (epoch, dev_acc, time.time() - eval_start, oracle_acc), file=sys.stderr)
+
         else:
             is_better = True
 
@@ -284,53 +293,53 @@ def train(args):
                 # set new lr
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr
+        if epoch % args.valid_every_epoch == 0:
+            if is_better:
+                patience = 0
+                model_file = args.save_to + '.bin'
+                print('save the current model ..', file=sys.stderr)
+                print('save model to [%s]' % model_file, file=sys.stderr)
+                model.save(model_file)
+                # also save the optimizers' state
+                torch.save(optimizer.state_dict(), args.save_to + '.optim.bin')
+            elif patience < args.patience and epoch >= args.lr_decay_after_epoch:
+                patience += 1
+                print('hit patience %d' % patience, file=sys.stderr)
 
-        if is_better:
-            patience = 0
-            model_file = args.save_to + '.bin'
-            print('save the current model ..', file=sys.stderr)
-            print('save model to [%s]' % model_file, file=sys.stderr)
-            model.save(model_file)
-            # also save the optimizers' state
-            torch.save(optimizer.state_dict(), args.save_to + '.optim.bin')
-        elif patience < args.patience and epoch >= args.lr_decay_after_epoch:
-            patience += 1
-            print('hit patience %d' % patience, file=sys.stderr)
-
-        if epoch == args.max_epoch:
-            print('reached max epoch, stop!', file=sys.stderr)
-            exit(0)
-
-        if patience >= args.patience and epoch >= args.lr_decay_after_epoch:
-            num_trial += 1
-            print('hit #%d trial' % num_trial, file=sys.stderr)
-            if num_trial == args.max_num_trial:
-                print('early stop!', file=sys.stderr)
+            if epoch == args.max_epoch:
+                print('reached max epoch, stop!', file=sys.stderr)
                 exit(0)
 
-            # decay lr, and restore from previously best checkpoint
-            lr = optimizer.param_groups[0]['lr'] * args.lr_decay
-            print('load previously best model and decay learning rate to %f' % lr, file=sys.stderr)
+            if patience >= args.patience and epoch >= args.lr_decay_after_epoch:
+                num_trial += 1
+                print('hit #%d trial' % num_trial, file=sys.stderr)
+                if num_trial == args.max_num_trial:
+                    print('early stop!', file=sys.stderr)
+                    exit(0)
 
-            # load model
-            params = torch.load(args.save_to + '.bin', map_location=lambda storage, loc: storage)
-            model.load_state_dict(params['state_dict'])
-            if args.cuda: model = model.cuda()
+                # decay lr, and restore from previously best checkpoint
+                lr = optimizer.param_groups[0]['lr'] * args.lr_decay
+                print('load previously best model and decay learning rate to %f' % lr, file=sys.stderr)
 
-            # load optimizers
-            if args.reset_optimizer:
-                print('reset optimizer', file=sys.stderr)
-                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-            else:
-                print('restore parameters of the optimizers', file=sys.stderr)
-                optimizer.load_state_dict(torch.load(args.save_to + '.optim.bin'))
+                # load model
+                params = torch.load(args.save_to + '.bin', map_location=lambda storage, loc: storage)
+                model.load_state_dict(params['state_dict'])
+                if args.cuda: model = model.cuda()
 
-            # set new lr
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
+                # load optimizers
+                if args.reset_optimizer:
+                    print('reset optimizer', file=sys.stderr)
+                    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+                else:
+                    print('restore parameters of the optimizers', file=sys.stderr)
+                    optimizer.load_state_dict(torch.load(args.save_to + '.optim.bin'))
 
-            # reset patience
-            patience = 0
+                # set new lr
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = lr
+
+                # reset patience
+                patience = 0
 
 
 def train_decoder(args):
