@@ -114,6 +114,8 @@ def evaluate(examples, parser, args, verbose=False, return_decode_result=False, 
                     hyp_code_set.add(hyp.code)
 
                 if eval_top_pred_only: break
+            # Put the reference example along side the decode hypothesis for ease of calculating blew score
+            hyps.insert(0, example)
 
                 # if verbose:
                 #     if hyp_id == 0 and hyp.correct:
