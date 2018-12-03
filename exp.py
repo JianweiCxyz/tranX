@@ -25,6 +25,7 @@ from model.prior import UniformPrior, LSTMPrior
 from model.reconstruction_model import Reconstructor
 from model.struct_vae import StructVAE, StructVAE_LMBaseline, StructVAE_SrcLmAndLinearBaseline
 from model.utils import GloveHelper
+from evaluate_bleu import eval_bleu 
 
 
 def init_arg_parser():
@@ -99,6 +100,7 @@ def init_arg_parser():
     arg_parser.add_argument('--valid_metric', default='acc', choices=['acc'],
                             help='Metric used for validation')
     arg_parser.add_argument('--valid_every_epoch', default=1, type=int, help='Perform validation every x epoch')
+    arg_parser.add_argument('--validate_with_bleu', default=0, type=int, help='Use bleu score as criteria for testing and training')
     arg_parser.add_argument('--log_every', default=10, type=int, help='Log training statistics every n iterations')
 
     arg_parser.add_argument('--save_to', default='model', type=str, help='Save trained model to')
@@ -219,8 +221,12 @@ def train(args):
             batch_examples = [e for e in batch_examples if len(e.tgt_actions) <= args.decode_max_time_step]
 
             train_iter += 1
+            if len(batch_examples[0].tgt_actions) > 90:
+                continue
+            # print("Iter: {} example:{} actionlen:{}".format(train_iter, batch_examples[0].tgt_code, len(batch_examples[0].tgt_actions)), file=sys.stderr)
             optimizer.zero_grad()
-
+            if epoch > 1:
+                import ipdb; ipdb.set_trace()
             ret_val = model.score(batch_examples)
             loss = -ret_val[0]
 
@@ -255,6 +261,16 @@ def train(args):
 
                 print(log_str, file=sys.stderr)
                 report_loss = report_examples = 0.
+            if train_iter and train_iter % 500 == 0:
+                _, decodes = evaluation.evaluate(dev_set.examples, model, args,
+                                                   verbose=False, eval_top_pred_only=False, return_decode_result=True)
+                bleu_result = eval_bleu(decodes)
+                for hyps in decodes:
+                    print("intent: ", " ".join(hyps[0].src_sent))
+                    print("code: ", hyps[0].tgt_code)
+                    for hyp in hyps[1:]:
+                        print('\t', hyp.code)
+
 
         print('[Epoch %d] epoch elapsed %ds' % (epoch, time.time() - epoch_begin), file=sys.stderr)
 
@@ -268,12 +284,30 @@ def train(args):
             if epoch % args.valid_every_epoch == 0:
                 print('[Epoch %d] begin validation' % epoch, file=sys.stderr)
                 eval_start = time.time()
-                eval_results = evaluation.evaluate(dev_set.examples, model, args,
-                                                   verbose=True, eval_top_pred_only=args.eval_top_pred_only)
-                dev_acc = eval_results['accuracy']
-                print('[Epoch %d] code generation accuracy=%.5f took %ds' % (epoch, dev_acc, time.time() - eval_start), file=sys.stderr)
-                is_better = history_dev_scores == [] or dev_acc > max(history_dev_scores)
-                history_dev_scores.append(dev_acc)
+                if args.validate_with_bleu:
+                    eval_results, decodes = evaluation.evaluate(dev_set.examples, model, args,
+                                                       verbose=True, eval_top_pred_only=False, return_decode_result=True)
+                    bleu_result = eval_bleu(decodes)
+                    blue_exact = bleu_result["bleu_exact"]
+                    is_better = history_dev_scores == [] or blue_exact > max(history_dev_scores)
+                    history_dev_scores.append(blue_exact)
+
+                else:
+                    eval_results = evaluation.evaluate(dev_set.examples, model, args,
+                                                       verbose=True, eval_top_pred_only=args.eval_top_pred_only)
+                    dev_acc = eval_results['accuracy']
+                    oracle_acc = eval_results['oracle_accuracy']
+                    print('[Epoch %d] code generation dev accuracy=%.5f took %ds (oracle_accuracy=%.5f)' % (epoch, dev_acc, time.time() - eval_start, oracle_acc), file=sys.stderr)
+                    is_better = history_dev_scores == [] or dev_acc > max(history_dev_scores)
+                    history_dev_scores.append(dev_acc)
+                    # eval on train
+                    eval_start = time.time()
+                    eval_results = evaluation.evaluate(train_set.examples[:500], model, args,
+                                                       verbose=True, eval_top_pred_only=args.eval_top_pred_only)
+                    dev_acc = eval_results['accuracy']
+                    oracle_acc = eval_results['oracle_accuracy']
+                    print('[Epoch %d] code generation train accuracy=%.5f took %ds (oracle_accuracy=%.5f)' % (epoch, dev_acc, time.time() - eval_start, oracle_acc), file=sys.stderr)
+
         else:
             is_better = True
 
@@ -284,53 +318,53 @@ def train(args):
                 # set new lr
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr
+        if epoch % args.valid_every_epoch == 0:
+            if is_better:
+                patience = 0
+                model_file = args.save_to + '.bin'
+                print('save the current model ..', file=sys.stderr)
+                print('save model to [%s]' % model_file, file=sys.stderr)
+                model.save(model_file)
+                # also save the optimizers' state
+                torch.save(optimizer.state_dict(), args.save_to + '.optim.bin')
+            elif patience < args.patience and epoch >= args.lr_decay_after_epoch:
+                patience += 1
+                print('hit patience %d' % patience, file=sys.stderr)
 
-        if is_better:
-            patience = 0
-            model_file = args.save_to + '.bin'
-            print('save the current model ..', file=sys.stderr)
-            print('save model to [%s]' % model_file, file=sys.stderr)
-            model.save(model_file)
-            # also save the optimizers' state
-            torch.save(optimizer.state_dict(), args.save_to + '.optim.bin')
-        elif patience < args.patience and epoch >= args.lr_decay_after_epoch:
-            patience += 1
-            print('hit patience %d' % patience, file=sys.stderr)
-
-        if epoch == args.max_epoch:
-            print('reached max epoch, stop!', file=sys.stderr)
-            exit(0)
-
-        if patience >= args.patience and epoch >= args.lr_decay_after_epoch:
-            num_trial += 1
-            print('hit #%d trial' % num_trial, file=sys.stderr)
-            if num_trial == args.max_num_trial:
-                print('early stop!', file=sys.stderr)
+            if epoch == args.max_epoch:
+                print('reached max epoch, stop!', file=sys.stderr)
                 exit(0)
 
-            # decay lr, and restore from previously best checkpoint
-            lr = optimizer.param_groups[0]['lr'] * args.lr_decay
-            print('load previously best model and decay learning rate to %f' % lr, file=sys.stderr)
+            if patience >= args.patience and epoch >= args.lr_decay_after_epoch:
+                num_trial += 1
+                print('hit #%d trial' % num_trial, file=sys.stderr)
+                if num_trial == args.max_num_trial:
+                    print('early stop!', file=sys.stderr)
+                    exit(0)
 
-            # load model
-            params = torch.load(args.save_to + '.bin', map_location=lambda storage, loc: storage)
-            model.load_state_dict(params['state_dict'])
-            if args.cuda: model = model.cuda()
+                # decay lr, and restore from previously best checkpoint
+                lr = optimizer.param_groups[0]['lr'] * args.lr_decay
+                print('load previously best model and decay learning rate to %f' % lr, file=sys.stderr)
 
-            # load optimizers
-            if args.reset_optimizer:
-                print('reset optimizer', file=sys.stderr)
-                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-            else:
-                print('restore parameters of the optimizers', file=sys.stderr)
-                optimizer.load_state_dict(torch.load(args.save_to + '.optim.bin'))
+                # load model
+                params = torch.load(args.save_to + '.bin', map_location=lambda storage, loc: storage)
+                model.load_state_dict(params['state_dict'])
+                if args.cuda: model = model.cuda()
 
-            # set new lr
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
+                # load optimizers
+                if args.reset_optimizer:
+                    print('reset optimizer', file=sys.stderr)
+                    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+                else:
+                    print('restore parameters of the optimizers', file=sys.stderr)
+                    optimizer.load_state_dict(torch.load(args.save_to + '.optim.bin'))
 
-            # reset patience
-            patience = 0
+                # set new lr
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = lr
+
+                # reset patience
+                patience = 0
 
 
 def train_decoder(args):
