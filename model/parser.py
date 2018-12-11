@@ -263,10 +263,6 @@ class Parser(nn.Module):
         primitive_copy_prob = self.src_pointer_net(
             src_encodings, batch.src_token_mask, query_vectors)
 
-        # probabilities of target (gold-standard) ApplyRule actions
-        # (tgt_action_len, batch_size)
-        tgt_apply_rule_prob = torch.gather(apply_rule_prob, dim=2,
-                                           index=batch.apply_rule_idx_matrix.unsqueeze(2)).squeeze(2)
 
         # (tgt_action_len, batch_size, primitive_vocab_size)
         gen_from_vocab_prob = F.softmax(
@@ -278,53 +274,54 @@ class Parser(nn.Module):
             self.primitive_predictor(query_vectors), dim=-1)
 
         # compute generation and copying probabilities
-        scores = Variable(
-            self.new_tensor(batch.max_action_num, batch.max_action_num, batch.max_action_num, len(batch)).zero_())
-        scores -= 1e10
-        for shift in range(-batch.max_action_num + 1, batch.max_action_num):
+        # scores = Variable(
+            # self.new_tensor(batch.max_action_num, batch.max_action_num, batch.max_action_num, len(batch)).zero_())
+        # scores -= 1e10
+        # for shift in range(-batch.max_action_num + 1, batch.max_action_num):
+        shift = 0
             # (tgt_action_len, batch_size)
-            tgt_primitive_copy_prob = torch.gather(primitive_copy_prob, dim=2,
-                                                   index=batch.shift_matrix('primitive_copy_pos_matrix', shift).unsqueeze(2)).squeeze(2)
+        tgt_primitive_copy_prob = torch.gather(primitive_copy_prob, dim=2,
+                                               index=batch.shift_matrix('primitive_copy_pos_matrix', shift).unsqueeze(2)).squeeze(2)
 
-            # (tgt_action_len, batch_size)
-            tgt_primitive_gen_from_vocab_prob = torch.gather(
-                gen_from_vocab_prob, dim=2,
-                                                             index=batch.shift_matrix('primitive_idx_matrix', shift).unsqueeze(2)).squeeze(2)
+        # (tgt_action_len, batch_size)
+        tgt_primitive_gen_from_vocab_prob = torch.gather(
+            gen_from_vocab_prob, dim=2,
+                                                         index=batch.shift_matrix('primitive_idx_matrix', shift).unsqueeze(2)).squeeze(2)
 
-            # mask positions in action_prob that are not used
-            # (tgt_action_len, batch_size)
-            apply_rule_mask = batch.shift_matrix('apply_rule_mask', shift)
-            gen_token_mask = batch.shift_matrix('gen_token_mask', shift)
-            primitive_copy_mask = batch.shift_matrix(
-                'primitive_copy_mask', shift)
-            action_mask_pad = torch.eq(
-                apply_rule_mask + gen_token_mask + primitive_copy_mask, 0.)
-            action_mask = 1. - action_mask_pad.float()
+        # probabilities of target (gold-standard) ApplyRule actions
+        # (tgt_action_len, batch_size)
+        tgt_apply_rule_prob = torch.gather(apply_rule_prob, dim=2,
+                                           index=batch.shift_matrix('apply_rule_idx_matrix', shift).unsqueeze(2)).squeeze(2)
 
-            # (tgt_action_len, batch_size)
-            action_prob = tgt_apply_rule_prob * apply_rule_mask + \
-                primitive_predictor[:, :, 0] * tgt_primitive_gen_from_vocab_prob * gen_token_mask + \
-                primitive_predictor[
-                    :, :, 1] * tgt_primitive_copy_prob * primitive_copy_mask
+        # mask positions in action_prob that are not used
+        # (tgt_action_len, batch_size)
+        apply_rule_mask = batch.shift_matrix('apply_rule_mask', shift)
+        gen_token_mask = batch.shift_matrix('gen_token_mask', shift)
+        primitive_copy_mask = batch.shift_matrix(
+            'primitive_copy_mask', shift)
+        action_mask_pad = torch.eq(
+            apply_rule_mask + gen_token_mask + primitive_copy_mask, 0.)
+        action_mask = 1. - action_mask_pad.float()
 
-            # avoid nan in log
-            action_prob.data.masked_fill_(action_mask_pad.data, 1.e-7)
+        # (tgt_action_len, batch_size)
+        action_prob = tgt_apply_rule_prob * apply_rule_mask + \
+            primitive_predictor[:, :, 0] * tgt_primitive_gen_from_vocab_prob * gen_token_mask + \
+            primitive_predictor[
+                :, :, 1] * tgt_primitive_copy_prob * primitive_copy_mask
 
-            action_prob = action_prob.log() 
-            action_prob.masked_fill_(action_mask_pad.data, -1e6)
+        # avoid nan in log
+        action_prob.data.masked_fill_(action_mask_pad.data, 1.e-7)
 
-            for k in range(1, batch.max_action_num - abs(shift) + 1):
-                for i in range(max(0, shift), min(batch.max_action_num - k, batch.max_action_num + shift - k) + 1):
-                    scores[k - 1, i - shift, i] = torch.sum(action_prob[i: i + k])
-
-        max_k_gram_scores, _ = torch.max(scores, dim=2)
-        mean_scores = Variable(self.new_tensor(batch.max_action_num, len(batch.src_sents)))
-        for k in range(batch.max_action_num):
-            mean_scores[k] = torch.mean(max_k_gram_scores[k, :batch.max_action_num - k], dim=0)
+        action_prob = action_prob.log() * action_mask
+        # max_k_gram_scores, _ = torch.max(scores, dim=2)
+        # mean_scores = Variable(self.new_tensor(batch.max_action_num, len(batch.src_sents)))
+        # for k in range(batch.max_action_num):
+            # mean_scores[k] = torch.mean(max_k_gram_scores[k, :batch.max_action_num - k], dim=0)
         
-        returns = [Variable(self.new_tensor(len(batch)))]
-        for j in range(len(batch.src_sents)):
-            returns[0][j] = torch.mean(mean_scores[: batch.src_sents_len[j], j])
+        returns = [torch.sum(action_prob, dim=0)]
+        # returns = [Variable(self.new_tensor(len(batch)))]
+        # for j in range(len(batch.src_sents)):
+            # returns[0][j] = torch.mean(mean_scores[: batch.src_sents_len[j], j])
 
         if self.args.sup_attention:
             returns.append(att_prob)

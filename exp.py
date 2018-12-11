@@ -216,7 +216,8 @@ def train(args):
     while True:
         epoch += 1
         epoch_begin = time.time()
-
+        # if epoch > 1:
+            # import ipdb; ipdb.set_trace()
         for batch_examples in train_set.batch_iter(batch_size=args.batch_size, shuffle=True):
             batch_examples = [e for e in batch_examples if len(e.tgt_actions) <= args.decode_max_time_step]
 
@@ -225,8 +226,6 @@ def train(args):
                 continue
             # print("Iter: {} example:{} actionlen:{}".format(train_iter, batch_examples[0].tgt_code, len(batch_examples[0].tgt_actions)), file=sys.stderr)
             optimizer.zero_grad()
-            if epoch > 1:
-                import ipdb; ipdb.set_trace()
             ret_val = model.score(batch_examples)
             loss = -ret_val[0]
 
@@ -261,15 +260,18 @@ def train(args):
 
                 print(log_str, file=sys.stderr)
                 report_loss = report_examples = 0.
-            if train_iter and train_iter % 500 == 0:
-                _, decodes = evaluation.evaluate(dev_set.examples, model, args,
-                                                   verbose=False, eval_top_pred_only=False, return_decode_result=True)
-                bleu_result = eval_bleu(decodes)
-                for hyps in decodes:
-                    print("intent: ", " ".join(hyps[0].src_sent))
-                    print("code: ", hyps[0].tgt_code)
-                    for hyp in hyps[1:]:
-                        print('\t', hyp.code)
+            # if train_iter and train_iter % 500 == 0:
+                # _, decodes = evaluation.evaluate(dev_set.examples, model, args,
+                                                   # verbose=True, eval_top_pred_only=False, return_decode_result=True)
+                # for i, hyps in enumerate(decodes[:100]):
+                    # if len(hyps) > 0:
+                        # print("intent: ", " ".join(hyps[0].src_sent), file=sys.stdout)
+                        # print("code: ", hyps[0].tgt_code, file=sys.stdout)
+                        # for hyp in hyps[1:]:
+                            # print('\t', hyp.code, file=sys.stdout)
+                    # else:
+                        # print('No data', file=sys.stdout)
+                # bleu_result = eval_bleu(decodes)
 
 
         print('[Epoch %d] epoch elapsed %ds' % (epoch, time.time() - epoch_begin), file=sys.stderr)
@@ -286,7 +288,7 @@ def train(args):
                 eval_start = time.time()
                 if args.validate_with_bleu:
                     eval_results, decodes = evaluation.evaluate(dev_set.examples, model, args,
-                                                       verbose=True, eval_top_pred_only=False, return_decode_result=True)
+                                                       verbose=False, eval_top_pred_only=False, return_decode_result=True)
                     bleu_result = eval_bleu(decodes)
                     blue_exact = bleu_result["bleu_exact"]
                     is_better = history_dev_scores == [] or blue_exact > max(history_dev_scores)
