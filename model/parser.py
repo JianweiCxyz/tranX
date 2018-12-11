@@ -281,11 +281,11 @@ class Parser(nn.Module):
         scores = Variable(self.new_tensor(batch.max_action_num, batch.max_action_num, len(batch)).zero_())
         scores -= 1e10
         tgt_primitive_copy_prob = torch.gather(primitive_copy_prob, dim=2,
-                                               index=primitive_copy_pos_matrix.unsqueeze(2)).squeeze(2)
+                                               index=batch.primitive_copy_pos_matrix.unsqueeze(2)).squeeze(2)
 
         # (tgt_action_len, batch_size)
         tgt_primitive_gen_from_vocab_prob = torch.gather(
-            gen_from_vocab_prob, dim=2, index=primitive_idx_matrix.unsqueeze(2)).squeeze(2)
+            gen_from_vocab_prob, dim=2, index=batch.primitive_idx_matrix.unsqueeze(2)).squeeze(2)
 
         # mask positions in action_prob that are not used
         # (tgt_action_len, batch_size)
