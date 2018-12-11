@@ -3,7 +3,7 @@
 source activate py2torch3cuda9
 
 seed=${1:-0}
-vocab="vocab.freq0.cancer.bin"
+vocab="vocab.freq0.bin"
 train_file="train.bin"
 dev_file="dev.bin"
 dropout=0.3
@@ -16,7 +16,7 @@ ptrnet_hidden_dim=32
 lr=0.001
 lr_decay=0.5
 beam_size=20
-lstm='lstm'  # lstm
+lstm='parent_feed'  # lstm
 model_name=model.sup.conala.${lstm}.hidden${hidden_size}.embed${embed_size}.action${action_embed_size}.field${field_embed_size}.type${type_embed_size}.dropout${dropout}.lr${lr}.lr_decay${lr_decay}.beam_size${beam_size}.${vocab}.${train_file}.glorot.par_state_w_field_embed.seed${seed}
 
 python exp.py \
@@ -47,7 +47,7 @@ python exp.py \
     --beam_size ${beam_size} \
     --log_every 50 \
     --validate_with_bleu 1 \
-    --save_to saved_models/conala/${model_name} 2>logs/conala/original.${model_name}.log
+    --save_to saved_models/conala/${model_name} 2>logs/conala/parent_feed.${model_name}.log
     #--save_to saved_models/conala/${model_name} 
 
 #     --no_parent_state \

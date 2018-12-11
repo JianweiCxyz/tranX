@@ -41,7 +41,7 @@ def init_arg_parser():
                                                'test', 'rerank',], default='train', help='Run mode')
 
     #### Model configuration ####
-    arg_parser.add_argument('--lstm', choices=['lstm'], default='lstm', help='Type of LSTM used, currently only standard LSTM cell is supported')
+    arg_parser.add_argument('--lstm', choices=['lstm', 'parent_feed'], default='lstm', help='Type of LSTM used, currently only standard LSTM cell is supported')
 
     # Embedding sizes
     arg_parser.add_argument('--embed_size', default=128, type=int, help='Size of word embeddings')
