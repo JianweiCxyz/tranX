@@ -225,8 +225,8 @@ def train(args):
                 continue
             # print("Iter: {} example:{} actionlen:{}".format(train_iter, batch_examples[0].tgt_code, len(batch_examples[0].tgt_actions)), file=sys.stderr)
             optimizer.zero_grad()
-            if epoch > 1:
-                import ipdb; ipdb.set_trace()
+            # if epoch > 1:
+                # import ipdb; ipdb.set_trace()
             ret_val = model.score(batch_examples)
             loss = -ret_val[0]
 
@@ -261,15 +261,15 @@ def train(args):
 
                 print(log_str, file=sys.stderr)
                 report_loss = report_examples = 0.
-            if train_iter and train_iter % 500 == 0:
-                _, decodes = evaluation.evaluate(dev_set.examples, model, args,
-                                                   verbose=False, eval_top_pred_only=False, return_decode_result=True)
-                bleu_result = eval_bleu(decodes)
-                for hyps in decodes:
-                    print("intent: ", " ".join(hyps[0].src_sent))
-                    print("code: ", hyps[0].tgt_code)
-                    for hyp in hyps[1:]:
-                        print('\t', hyp.code)
+            # if train_iter and train_iter % 500 == 0:
+                # _, decodes = evaluation.evaluate(dev_set.examples, model, args,
+                                                   # verbose=False, eval_top_pred_only=False, return_decode_result=True)
+                # bleu_result = eval_bleu(decodes)
+                # for hyps in decodes:
+                    # print("intent: ", " ".join(hyps[0].src_sent))
+                    # print("code: ", hyps[0].tgt_code)
+                    # for hyp in hyps[1:]:
+                        # print('\t', hyp.code)
 
 
         print('[Epoch %d] epoch elapsed %ds' % (epoch, time.time() - epoch_begin), file=sys.stderr)
@@ -301,12 +301,12 @@ def train(args):
                     is_better = history_dev_scores == [] or dev_acc > max(history_dev_scores)
                     history_dev_scores.append(dev_acc)
                     # eval on train
-                    eval_start = time.time()
-                    eval_results = evaluation.evaluate(train_set.examples[:500], model, args,
-                                                       verbose=True, eval_top_pred_only=args.eval_top_pred_only)
-                    dev_acc = eval_results['accuracy']
-                    oracle_acc = eval_results['oracle_accuracy']
-                    print('[Epoch %d] code generation train accuracy=%.5f took %ds (oracle_accuracy=%.5f)' % (epoch, dev_acc, time.time() - eval_start, oracle_acc), file=sys.stderr)
+                    # eval_start = time.time()
+                    # eval_results = evaluation.evaluate(train_set.examples[:500], model, args,
+                                                       # verbose=True, eval_top_pred_only=args.eval_top_pred_only)
+                    # dev_acc = eval_results['accuracy']
+                    # oracle_acc = eval_results['oracle_accuracy']
+                    # print('[Epoch %d] code generation train accuracy=%.5f took %ds (oracle_accuracy=%.5f)' % (epoch, dev_acc, time.time() - eval_start, oracle_acc), file=sys.stderr)
 
         else:
             is_better = True
