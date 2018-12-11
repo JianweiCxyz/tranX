@@ -3,7 +3,7 @@
 source activate py2torch3cuda9
 
 seed=${1:-0}
-vocab="vocab.freq0.small.bin"
+vocab="vocab.freq0.bin"
 train_file="train.bin"
 dev_file="dev.bin"
 dropout=0.3
