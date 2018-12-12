@@ -19,7 +19,7 @@ def correct_hyps(hyps):
 
 
 def eval_bleu(decodes, missing_exs):
-    total = len(decodes)
+    total = len(decodes) + len(missing_exs)
     len_candidates = len(min(decodes, key=lambda x: len(x))) - 1
     decodes = list(filter(lambda x: len(x) > 2, decodes))
     size = len(decodes) + len(missing_exs)
