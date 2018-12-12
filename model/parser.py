@@ -306,11 +306,10 @@ class Parser(nn.Module):
 
         action_prob = action_prob.log() 
         action_prob.masked_fill_(action_mask_pad.data, -1e6)
-        average = torch.mean(action_prob)
 
         for k in range(1, batch.max_action_num + 1):
             for i in range(0, min(batch.max_action_num - k, batch.max_action_num - k) + 1):
-                scores[k - 1, i] = torch.sum(action_prob[i: i + k]) + (batch.max_action_num - k) * average
+                scores[k - 1, i] = torch.sum(action_prob[i: i + k])
 
         mean_scores = Variable(self.new_tensor(batch.max_action_num, len(batch.src_sents)))
         for k in range(batch.max_action_num):
