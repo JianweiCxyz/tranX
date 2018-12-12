@@ -170,41 +170,58 @@ def get_parser_class(lang):
 
 def train(args):
     """Maximum Likelihood Estimation"""
-
-    grammar = ASDLGrammar.from_text(open(args.asdl_file).read())
-    transition_system = TransitionSystem.get_class_by_lang(args.lang)(grammar)
-    train_set = Dataset.from_bin_file(args.train_file)
-
     if args.dev_file:
         dev_set = Dataset.from_bin_file(args.dev_file)
-    else: dev_set = Dataset(examples=[])
+    else: 
+        dev_set = Dataset(examples=[])
+    train_set = Dataset.from_bin_file(args.train_file)
 
-    vocab = pickle.load(open(args.vocab, 'rb'))
-    
-    if args.lang == 'wikisql':
-        # import additional packages for wikisql dataset
-        from model.wikisql.dataset import WikiSqlExample, WikiSqlTable, TableColumn
+    if args.load_model:
+        print('load pre-trained model from [%s]' % args.load_model, file=sys.stderr)
+        params = torch.load(args.load_model, map_location=lambda storage, loc: storage)
+        vocab = params['vocab']
+        transition_system = params['transition_system']
+        saved_state = params['state_dict']
 
-    parser_cls = get_parser_class(args.lang)
-    model = parser_cls(args, vocab, transition_system)
-    model.train()
-    if args.cuda: model.cuda()
+        # transfer arguments
 
-    optimizer_cls = eval('torch.optim.%s' % args.optimizer)  # FIXME: this is evil!
-    optimizer = optimizer_cls(model.parameters(), lr=args.lr)
+        model = Parser(args, vocab, transition_system)
+        model.load_state_dict(saved_state)
+        ####################################
 
-    if args.uniform_init:
-        print('uniformly initialize parameters [-%f, +%f]' % (args.uniform_init, args.uniform_init), file=sys.stderr)
-        nn_utils.uniform_init(-args.uniform_init, args.uniform_init, model.parameters())
-    elif args.glorot_init:
-        print('use glorot initialization', file=sys.stderr)
-        nn_utils.glorot_init(model.parameters())
+        if args.cuda: model = model.cuda()
+        model.train()
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    else:
+        grammar = ASDLGrammar.from_text(open(args.asdl_file).read())
+        transition_system = TransitionSystem.get_class_by_lang(args.lang)(grammar)
 
-    # load pre-trained word embedding (optional)
-    if args.glove_embed_path:
-        print('load glove embedding from: %s' % args.glove_embed_path, file=sys.stderr)
-        glove_embedding = GloveHelper(args.glove_embed_path)
-        glove_embedding.load_to(model.src_embed, vocab.source)
+        vocab = pickle.load(open(args.vocab, 'rb'))
+        
+        if args.lang == 'wikisql':
+            # import additional packages for wikisql dataset
+            from model.wikisql.dataset import WikiSqlExample, WikiSqlTable, TableColumn
+
+        parser_cls = get_parser_class(args.lang)
+        model = parser_cls(args, vocab, transition_system)
+        model.train()
+        if args.cuda: model.cuda()
+
+        optimizer_cls = eval('torch.optim.%s' % args.optimizer)  # FIXME: this is evil!
+        optimizer = optimizer_cls(model.parameters(), lr=args.lr)
+
+        if args.uniform_init:
+            print('uniformly initialize parameters [-%f, +%f]' % (args.uniform_init, args.uniform_init), file=sys.stderr)
+            nn_utils.uniform_init(-args.uniform_init, args.uniform_init, model.parameters())
+        elif args.glorot_init:
+            print('use glorot initialization', file=sys.stderr)
+            nn_utils.glorot_init(model.parameters())
+
+        # load pre-trained word embedding (optional)
+        if args.glove_embed_path:
+            print('load glove embedding from: %s' % args.glove_embed_path, file=sys.stderr)
+            glove_embedding = GloveHelper(args.glove_embed_path)
+            glove_embedding.load_to(model.src_embed, vocab.source)
 
     print('begin training, %d training examples, %d dev examples' % (len(train_set), len(dev_set)), file=sys.stderr)
     print('vocab: %s' % repr(vocab), file=sys.stderr)
@@ -432,7 +449,6 @@ def train_decoder(args):
                       (train_iter,
                        report_loss / report_examples),
                       file=sys.stderr)
-
                 report_loss = report_examples = 0.
 
         print('[Epoch %d] epoch elapsed %ds' % (epoch, time.time() - epoch_begin), file=sys.stderr)
