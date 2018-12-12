@@ -4,8 +4,8 @@ source activate py2torch3cuda9
 
 seed=${1:-0}
 vocab="vocab.freq0.bin"
-train_file="train.bin"
-dev_file="dev.bin"
+train_file="train_final.bin"
+dev_file="test.bin"
 dropout=0.3
 hidden_size=256
 embed_size=128
@@ -17,7 +17,7 @@ lr=0.001
 lr_decay=0.5
 beam_size=20
 lstm='lstm'  # lstm
-model_name=scale.model.sup.conala.${lstm}.hidden${hidden_size}.embed${embed_size}.action${action_embed_size}.field${field_embed_size}.type${type_embed_size}.dropout${dropout}.lr${lr}.lr_decay${lr_decay}.beam_size${beam_size}.${vocab}.${train_file}.glorot.par_state_w_field_embed.seed${seed}
+model_name=final_subsuq.model.sup.conala.${lstm}.hidden${hidden_size}.embed${embed_size}.action${action_embed_size}.field${field_embed_size}.type${type_embed_size}.dropout${dropout}.lr${lr}.lr_decay${lr_decay}.beam_size${beam_size}.${vocab}.${train_file}.glorot.par_state_w_field_embed.seed${seed}
 
 python exp.py \
     --seed ${seed} \
@@ -42,7 +42,7 @@ python exp.py \
     --glorot_init \
     --lr ${lr} \
     --lr_decay ${lr_decay} \
-    --valid_every_epoch 4 \
+    --valid_every_epoch 1 \
     --lr_decay_after_epoch 8 \
     --beam_size ${beam_size} \
     --log_every 50 \
