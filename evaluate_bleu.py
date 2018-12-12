@@ -22,7 +22,7 @@ def eval_bleu(decodes, missing_exs):
     total = len(decodes)
     len_candidates = len(min(decodes, key=lambda x: len(x))) - 1
     decodes = list(filter(lambda x: len(x) > 2, decodes))
-    size = len(decodes)
+    size = len(decodes) + len(missing_exs)
     print("Got {} test examples with at least {} hyps each, {} examples has no predictions.".format(
         size, len_candidates, total - size))
     ref_list = [[tokenize_for_bleu_eval(hyps[0].tgt_code)] for hyps in decodes]
