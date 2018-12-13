@@ -69,6 +69,7 @@ if __name__ == '__main__':
             missing_exs[entry["rewritten_intent"]] = entry["snippet"]
     eval_bleu(decodes, missing_exs)
     oracle_idx = [correct_hyps(hyps) for hyps in decodes]
+    submission_dict = {}
     with open(args.decode_file + ".json", 'w') as f:
         data = []
         for hyps, correct_idx in zip(decodes, oracle_idx):
@@ -79,5 +80,9 @@ if __name__ == '__main__':
             obj["candidates"] = [remap_code(str_map, h.code) for h in hyps[1:]]
             obj["correct_idx"] = correct_idx
             obj["str_map"] = str_map
+            submission_dict[obj["gold"]] = obj["candidates"][0]
             data.append(obj)
-        json.dump(data, f, indent=4)
+        submission = []
+        for entry in test_data:
+            submission.append(submission_dict.get(entry["snippet"], ""))
+        json.dump(submission, f, indent=4)
